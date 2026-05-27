@@ -54,11 +54,6 @@ def get_feed(
     if user_id is None and post_id is None:
         raise ValueError("Необходимо указать хотя бы user_id или post_id")
 
-    # - выбрать данные из feed_action
-    # - JOIN с user и post
-    # - фильтрация по user_id / post_id (если заданы)
-    # - сортировка по времени (DESC)
-    # - ограничение по LIMIT
     query = """
     SELECT
             fa.user_id,
@@ -89,7 +84,7 @@ def get_feed(
 
     result = []
     with conn.cursor(cursor_factory=DictCursor) as cur:
-       
+
         cur.execute(query, (user_id,user_id, post_id, post_id, limit))
         rows = cur.fetchall()
         for row in rows:
