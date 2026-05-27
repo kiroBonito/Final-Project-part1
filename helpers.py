@@ -1,6 +1,7 @@
 from typing import List, Optional
 from psycopg2.extensions import connection
 from psycopg2.extras import DictCursor
+import pydantic
 from database import postgres_connection
 from models import User, Post, Feed
 
@@ -59,35 +60,61 @@ def get_feed(
     # - сортировка по времени (DESC)
     # - ограничение по LIMIT
     query = """
-    SELECT 
-        u.id,
-        p.id,
-        fa.action,
-        fa.time
+    SELECT
+            fa.user_id,
+            fa.post_id,
+            fa.action,
+            fa.time,
+            u.id,
+            u.gender,
+            u.age,
+            u.country,
+            u.city,
+            u.exp_group,
+            u.os,
+            u.source,
+            p.id,
+            p.text,
+            p.topic
+
         FROM public.feed_action fa
-        JOIN public.user u on fa.user_id = u.id
-        JOIN public.post p on fa.post_id = p.id
-    WHERE fa.user_id = %s AND fa.post_id = %s 
-    LIMIT %s    
+        JOIN public.user u
+            ON fa.user_id = u.id
+        JOIN public.post p
+            ON fa.post_id = p.id
+        WHERE (%s IS NULL OR fa.user_id = %s) AND (%s IS NULL OR fa.post_id = %s)
+        ORDER BY fa.time DESC
+        LIMIT %s   
     """
 
     result = []
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        # TODO: Выполнить запрос, получить строки
-        # TODO: Для каждой строки:
-        # TODO: Создать объект User из строки
-        # TODO: Создать объект Post из строки
-        # TODO: Создать объект Feed и добавить в список result
-        ...
-        cur.execute(query, (user_id, post_id, limit))
+       
+        cur.execute(query, (user_id,user_id, post_id, post_id, limit))
         rows = cur.fetchall()
         for row in rows:
-            user = User(**row)
-            post = Post(**row)
+            user = User(
+                id = row["user_id"],
+                gender = row["gender"],
+                age = row["age"],
+                country = row["country"],
+                city = row["city"],
+                exp_group = row["exp_group"],
+                os = row["os"],
+                source = row["source"],
+            )
+            post = Post(
+                id = row["post_id"],
+                text = row["text"],
+                topic = row["topic"],
+            )
             feed = Feed(
+                user_id=row["user_id"],
+                post_id=row["post_id"],
                 user=user,
                 post=post,
-                **row
+                action=row["action"],
+                time=row["time"],
             )
             result.append(feed)
         return result
@@ -112,12 +139,13 @@ def get_recommended_feed(conn: connection, id: int, limit: int) -> List[Post]:
     query = """
         SELECT 
             p.id,
+            p.text,
             p.topic,
             count(fa.action)
         FROM public.post p
         JOIN public.feed_action fa ON fa.post_id = p.id
         WHERE fa.action = 'like'
-        GROUP BY p.id, p.topic
+        GROUP BY p.id, p.text, p.topic
         ORDER BY COUNT(fa.action) DESC  
         LIMIT %s 
         """
@@ -126,10 +154,5 @@ def get_recommended_feed(conn: connection, id: int, limit: int) -> List[Post]:
         cur.execute(query, (limit,))
         rows = cur.fetchall()
         for row in rows:
-            post = Post(
-                id = row["id"],
-                topic = row["topic"]
-            )
-            result.append(post)
-        # TODO: Преобразовать строки в список объектов Post
-        return result
+            result.append(Post(id=row["id"], text=row["text"], topic=row["topic"]))
+    return result
